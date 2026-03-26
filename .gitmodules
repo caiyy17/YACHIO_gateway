@@ -1,0 +1,6 @@
+[submodule "blivedm"]
+	path = blivedm
+	url = https://github.com/xfgryujk/blivedm.git
+[submodule "pytchat"]
+	path = pytchat
+	url = https://github.com/taizan-hokuto/pytchat.git
