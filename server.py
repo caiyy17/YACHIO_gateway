@@ -5,11 +5,10 @@ Thin routing layer that connects live receiving modules to output modules:
   live/ (input) → server.py (router) → livechat/ (WebSocket display) + unity/ (forward)
 
 Usage:
-    python server.py [--port 8080] [--unity-endpoint http://localhost:7890/send]
+    python server.py [--port 8080] [--host 127.0.0.1]
 """
 
 import sys
-import os
 import io
 import json
 import uuid
@@ -150,6 +149,7 @@ class GatewayServer:
         await self.livechat.broadcast({
             'type': 'feed',
             'msg_type': msg_type, 'user': user, 'text': text,
+            'guard_level': 0, 'num': 0, 'price': 0, 'face': '',
         })
 
     # ─── Shared callback ───
@@ -346,63 +346,11 @@ def main():
     parser = argparse.ArgumentParser(description='YACHIO Gateway Server')
     parser.add_argument('--port', type=int, default=8080, help='Server port (default: 8080)')
     parser.add_argument('--host', type=str, default='127.0.0.1', help='Server host (default: 127.0.0.1)')
-    parser.add_argument('--unity-endpoint', type=str, default='http://localhost:7890/send',
-                        help='Unity ExternalMessageManager endpoint')
-    parser.add_argument('--pipeline-destination', type=int, default=0,
-                        help='Pipeline module destination index (default: 0)')
-    parser.add_argument('--sessdata', type=str, default='',
-                        help='Bilibili SESSDATA cookie for authenticated access')
-    parser.add_argument('--open-live-key-id', type=str, default='',
-                        help='Open Live access key ID')
-    parser.add_argument('--open-live-key-secret', type=str, default='',
-                        help='Open Live access key secret')
-    parser.add_argument('--open-live-app-id', type=int, default=0,
-                        help='Open Live app ID')
     args = parser.parse_args()
 
-    # Load saved settings first, then override with CLI args / env vars
-    saved = load_settings()
-
-    sessdata = args.sessdata or os.environ.get('BILIBILI_SESSDATA', '') or saved.get('sessdata', '')
-    ol_key_id = args.open_live_key_id or os.environ.get('OPEN_LIVE_KEY_ID', '') or saved.get('open_live_key_id', '')
-    ol_key_secret = args.open_live_key_secret or os.environ.get('OPEN_LIVE_KEY_SECRET', '') or saved.get('open_live_key_secret', '')
-    ol_app_id = args.open_live_app_id or int(os.environ.get('OPEN_LIVE_APP_ID', '0')) or saved.get('open_live_app_id', 0)
-
-    # For settings with defaults, saved values take priority over argparse defaults
-    unity_ep = saved.get('unity_endpoint', args.unity_endpoint) if args.unity_endpoint == 'http://localhost:7890/send' else args.unity_endpoint
-    pipe_dest = saved.get('pipeline_destination', args.pipeline_destination) if args.pipeline_destination == 0 else args.pipeline_destination
-
-    config = {
-        'unity_endpoint': unity_ep,
-        'pipeline_destination': pipe_dest,
-        'sessdata': sessdata,
-        'open_live_key_id': ol_key_id,
-        'open_live_key_secret': ol_key_secret,
-        'open_live_app_id': ol_app_id,
-        'auto_forward': saved.get('auto_forward', True),
-        'forward_gifts': saved.get('forward_gifts', True),
-        'last_room_id': saved.get('last_room_id'),
-        'last_connect_mode': saved.get('last_connect_mode'),
-        'last_platform': saved.get('last_platform', 'bilibili'),
-        'custom_css': saved.get('custom_css', ''),
-        'block_gift_danmaku': saved.get('block_gift_danmaku', False),
-        'block_level': saved.get('block_level', 0),
-        'block_newbie': saved.get('block_newbie', False),
-        'block_not_mobile_verified': saved.get('block_not_mobile_verified', False),
-        'block_medal_level': saved.get('block_medal_level', 0),
-        'block_keywords': saved.get('block_keywords', ''),
-        'block_users': saved.get('block_users', ''),
-        'block_mirror_messages': saved.get('block_mirror_messages', False),
-    }
-
+    config = load_settings()
     app = create_app(config)
     logger.info(f'Starting gateway on http://{args.host}:{args.port}')
-    if sessdata:
-        logger.info('Using SESSDATA for authenticated access')
-    if ol_key_id:
-        logger.info('Open Live credentials configured')
-    if saved:
-        logger.info(f'Loaded settings from {SETTINGS_FILE}')
     web.run_app(app, host=args.host, port=args.port, print=None)
 
 

@@ -666,7 +666,7 @@ const MSG_TYPE_FIELDS = {
   danmaku:    { text: true,  textLabel: 'text',      guardLevel: true,  giftNum: false, priceYuan: false },
   gift:       { text: true,  textLabel: 'gift name',  guardLevel: false, giftNum: true,  priceYuan: true  },
   super_chat: { text: true,  textLabel: 'message',    guardLevel: false, giftNum: false, priceYuan: true  },
-  guard:      { text: false, textLabel: 'text',       guardLevel: true,  giftNum: false, priceYuan: false },
+  guard:      { text: false, textLabel: 'text',       guardLevel: true,  giftNum: true,  priceYuan: true  },
 };
 
 function onMsgTypeChange() {
@@ -891,7 +891,7 @@ function handleServerMessage(msg) {
 
 // ─── Modal Helpers ───
 function openModal(id) {
-  document.getElementById(id).classList.add('open');
+  requestAnimationFrame(() => document.getElementById(id).classList.add('open'));
 }
 function closeModal(id) {
   document.getElementById(id).classList.remove('open');

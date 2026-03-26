@@ -57,9 +57,9 @@ class BilibiliLive:
         # Connection state
         self._live_client = None
         self.connected = False
-        self.room_id = config.get('room_id', '')
-        self.auth_code = config.get('auth_code', '')
-        self.connect_mode = config.get('connect_mode', 'guest')
+        self.room_id = config.get('room_id') or ''
+        self.auth_code = config.get('auth_code') or ''
+        self.connect_mode = config.get('connect_mode') or 'guest'
 
         # Settings
         self.auto_forward = config.get('auto_forward', True)
@@ -128,8 +128,6 @@ class BilibiliLive:
             return await self._connect_web(self.room_id)
 
     async def _connect_guest(self, room_id):
-        self.room_id = room_id
-        self.connect_mode = 'guest'
         try:
             guest_session = aiohttp.ClientSession(
                 response_class=_CustomClientResponse,
@@ -151,8 +149,6 @@ class BilibiliLive:
             return False
 
     async def _connect_web(self, room_id):
-        self.room_id = room_id
-        self.connect_mode = 'web'
         try:
             self._live_client = blivedm.BLiveClient(
                 int(room_id), session=self._bili_session,
@@ -176,8 +172,6 @@ class BilibiliLive:
             await self._on_status_change(False, error=err)
             return False
 
-        self.room_id = auth_code
-        self.connect_mode = 'open_live'
         try:
             self._live_client = blivedm.OpenLiveClient(
                 access_key_id=self.open_live_key_id,
@@ -209,8 +203,6 @@ class BilibiliLive:
                     pass
             self._live_client = None
         self.connected = False
-        self.room_id = None
-        self.connect_mode = None
         logger.info('Disconnected from bilibili')
         await self._on_status_change(False)
 
@@ -358,6 +350,8 @@ class _DanmakuHandler(blivedm.BaseHandler):
 
         self._live.msg_received += 1
         if self._should_block_danmaku(message):
+            self._run(self._live._on_log('blocked', f'{message.uname}: {message.msg}'))
+            logger.info(f'[blocked] {message.uname}: {message.msg}')
             return
 
         self._run(self._live._on_log('danmaku', f'{message.uname}: {message.msg}'))
@@ -458,6 +452,8 @@ class _OpenLiveHandler(blivedm.BaseHandler):
     def _on_open_live_danmaku(self, client, message: open_models.DanmakuMessage):
         self._live.msg_received += 1
         if self._should_block_danmaku(message):
+            self._run(self._live._on_log('blocked', f'{message.uname}: {message.msg}'))
+            logger.info(f'[blocked] {message.uname}: {message.msg}')
             return
 
         self._run(self._live._on_log('danmaku', f'{message.uname}: {message.msg}'))
