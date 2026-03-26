@@ -1,0 +1,5 @@
+settings.json
+__pycache__/
+*.pyc
+_gateway_test.log
+test_results.txt

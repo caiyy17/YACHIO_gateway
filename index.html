@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YACHIO Gateway</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #fff;
+    color: #111;
+    display: flex;
+    gap: 32px;
+    padding: 40px 20px;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  .left-panel {
+    flex: 1;
+    min-width: 0;
+    max-width: 640px;
+  }
+  .right-panel {
+    width: 380px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 20px;
+    align-self: flex-start;
+    max-height: calc(100vh - 40px);
+    display: flex;
+    flex-direction: column;
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 32px;
+  }
+  h2 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eee;
+  }
+  .section {
+    margin-bottom: 32px;
+  }
+  .field {
+    margin-bottom: 12px;
+  }
+  .field-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .field-row .field {
+    flex: 1;
+    margin-bottom: 0;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 6px;
+    color: #555;
+  }
+  input[type="text"], input[type="number"], select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: monospace;
+    outline: none;
+    transition: border-color 0.2s;
+    background: #fff;
+  }
+  input[type="text"]:focus, input[type="number"]:focus, select:focus {
+    border-color: #111;
+  }
+  textarea {
+    width: 100%;
+    height: 160px;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: monospace;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+    line-height: 1.5;
+  }
+  textarea:focus {
+    border-color: #111;
+  }
+  .actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+  }
+  button {
+    padding: 10px 24px;
+    border: 1px solid #111;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-send {
+    background: #111;
+    color: #fff;
+  }
+  .btn-send:hover {
+    background: #333;
+  }
+  .btn-send:disabled {
+    background: #999;
+    border-color: #999;
+    cursor: not-allowed;
+  }
+  .btn-secondary {
+    background: #fff;
+    color: #111;
+  }
+  .btn-secondary:hover {
+    background: #f5f5f5;
+  }
+  .btn-danger {
+    background: #fff;
+    color: #8b2020;
+    border-color: #8b2020;
+  }
+  .btn-danger:hover {
+    background: #fdf0f0;
+  }
+  .status {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: monospace;
+    display: none;
+  }
+  .status.success {
+    display: block;
+    background: #f0f9f0;
+    border: 1px solid #cde6cd;
+    color: #2d6a2d;
+  }
+  .status.error {
+    display: block;
+    background: #fdf0f0;
+    border: 1px solid #e6cdcd;
+    color: #8b2020;
+  }
+  .status.info {
+    display: block;
+    background: #f0f4f9;
+    border: 1px solid #cdd6e6;
+    color: #2d3d6a;
+  }
+  .indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .indicator.off { background: #ccc; }
+  .indicator.on { background: #2d6a2d; }
+  .log {
+    margin-top: 24px;
+  }
+  .log h2 {
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 8px;
+  }
+  .log-list {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: monospace;
+  }
+  .log-entry {
+    padding: 6px 10px;
+    border-bottom: 1px solid #f5f5f5;
+    display: flex;
+    gap: 10px;
+  }
+  .log-entry:last-child {
+    border-bottom: none;
+  }
+  .log-time {
+    color: #999;
+    flex-shrink: 0;
+  }
+  .log-tag {
+    flex-shrink: 0;
+    font-weight: 600;
+    font-size: 11px;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  .log-tag.danmaku { background: #eef; color: #336; }
+  .log-tag.gift { background: #fef0e0; color: #965a00; }
+  .log-tag.member { background: #f0eef8; color: #4a3d8f; }
+  .log-tag.sc { background: #fff0f0; color: #8b2020; }
+  .log-tag.manual { background: #f0f0f0; color: #555; }
+  .log-tag.fwd { background: #e8f5e8; color: #2d6a2d; }
+  .log-tag.err { background: #fdf0f0; color: #8b2020; }
+  .log-tag.pipeline { background: #e8eef5; color: #2d4a6a; }
+  .log-msg {
+    word-break: break-all;
+  }
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .checkbox-row label {
+    margin-bottom: 0;
+    font-size: 14px;
+    color: #111;
+  }
+  .stats {
+    font-size: 12px;
+    color: #999;
+    margin-top: 4px;
+  }
+  .preview {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: monospace;
+    background: #fafafa;
+    word-break: break-all;
+    white-space: pre-wrap;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+  /* ─── Live Feed (right panel) ─── */
+  .feed-header {
+    font-size: 15px;
+    font-weight: 600;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eee;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .feed-header .feed-count {
+    font-size: 12px;
+    font-weight: 400;
+    color: #999;
+  }
+  .feed-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column-reverse;
+  }
+  .feed-item {
+    padding: 8px 0;
+    border-bottom: 1px solid #f5f5f5;
+    font-size: 13px;
+    line-height: 1.5;
+    animation: fadeIn 0.3s ease;
+  }
+  .feed-item:first-child {
+    border-bottom: none;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .feed-user {
+    font-weight: 600;
+    margin-right: 4px;
+  }
+  .feed-user.captain { color: #6b8dd6; }
+  .feed-user.admiral { color: #c563e0; }
+  .feed-user.governor { color: #e09c63; }
+  .feed-text {
+    word-break: break-all;
+  }
+  .feed-meta {
+    font-size: 11px;
+    color: #999;
+    margin-top: 2px;
+  }
+  .feed-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  .feed-badge.gift { background: #fef0e0; color: #965a00; }
+  .feed-badge.sc { background: #fff0f0; color: #8b2020; }
+  .feed-badge.guard { background: #f0eef8; color: #4a3d8f; }
+  .feed-badge.pipeline { background: #e8eef5; color: #2d4a6a; }
+  .feed-empty {
+    color: #ccc;
+    font-size: 13px;
+    text-align: center;
+    margin-top: 40px;
+  }
+  /* ─── Header with settings buttons ─── */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  .header h1 { margin-bottom: 0; }
+  .header-spacer { flex: 1; }
+  .btn-settings {
+    padding: 6px 14px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    background: #fff;
+    color: #555;
+    transition: all 0.15s;
+  }
+  .btn-settings:hover {
+    border-color: #111;
+    color: #111;
+  }
+  /* ─── Modal ─── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.3);
+    z-index: 100;
+    justify-content: center;
+    align-items: center;
+  }
+  .modal-overlay.open {
+    display: flex;
+  }
+  .modal {
+    background: #fff;
+    border-radius: 10px;
+    padding: 28px 32px;
+    min-width: 420px;
+    max-width: 520px;
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    animation: modalIn 0.2s ease;
+  }
+  @keyframes modalIn {
+    from { opacity: 0; transform: translateY(-12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .modal h2 {
+    margin-bottom: 20px;
+  }
+  .modal .actions {
+    margin-top: 20px;
+    justify-content: flex-end;
+  }
+</style>
+</head>
+<body>
+<div class="left-panel">
+  <div class="header">
+    <h1>YACHIO Gateway</h1>
+    <div class="header-spacer"></div>
+    <button class="btn-settings" onclick="openModal('liveModal')">Live</button>
+    <button class="btn-settings" onclick="openModal('unityModal')">Unity</button>
+    <button class="btn-settings" onclick="openModal('frontendModal')">Frontend</button>
+  </div>
+
+  <!-- Live Room -->
+  <div class="section">
+    <h2><span class="indicator off" id="bliveIndicator"></span>Live Room</h2>
+    <div class="field-row">
+      <div class="field" style="display:flex; align-items:center; gap: 12px;">
+        <button class="btn-send" id="connectBtn" onclick="toggleLiveRoom()">Connect</button>
+        <span class="stats" id="bliveRoomDisplay" style="margin:0;"></span>
+      </div>
+    </div>
+    <div class="status" id="bliveStatus"></div>
+    <div class="stats" id="bliveStats"></div>
+  </div>
+
+  <!-- Unity Connection -->
+  <div class="section">
+    <h2><span class="indicator off" id="unityIndicator"></span>Unity</h2>
+    <div class="field-row">
+      <div class="field" style="display:flex; align-items:center; gap: 12px;">
+        <button class="btn-send" id="unityConnectBtn" onclick="toggleUnity()">Connect</button>
+        <span class="stats" id="unityEndpointDisplay" style="margin:0;"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Danmaku Send -->
+  <div class="section">
+    <h2>Send Danmaku</h2>
+    <div class="field-row">
+      <div class="field">
+        <label>text</label>
+        <input type="text" id="dText" value="" placeholder="danmaku content">
+      </div>
+      <div class="field" style="max-width: 160px;">
+        <label>user</label>
+        <input type="text" id="dUser" value="test_user">
+      </div>
+      <div class="field" style="min-width: 360px;">
+        <label>avatar</label>
+        <div style="display:flex; gap:4px; align-items:center;">
+          <select id="dFaceSelect" onchange="onAvatarSelect()" style="width:140px; flex-shrink:0;">
+            <option value="">-- select --</option>
+          </select>
+          <input type="text" id="dFace" value="" placeholder="URL" style="flex:1;">
+          <label style="cursor:pointer; padding:6px 10px; border:1px solid #ddd; border-radius:6px; font-size:12px; white-space:nowrap;">
+            Upload
+            <input type="file" accept="image/*" style="display:none" onchange="handleAvatarUpload(this)">
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>msg_type</label>
+        <select id="dMsgType" onchange="onMsgTypeChange()">
+          <option value="danmaku">danmaku</option>
+          <option value="gift">gift</option>
+          <option value="super_chat">super_chat</option>
+          <option value="guard">guard</option>
+        </select>
+      </div>
+      <div class="field" id="fGuardLevel">
+        <label>guard_level</label>
+        <select id="dGuardLevel">
+          <option value="0">0 - none</option>
+          <option value="1">1 - governor</option>
+          <option value="2">2 - admiral</option>
+          <option value="3">3 - captain</option>
+        </select>
+      </div>
+      <div class="field" id="fGiftNum" style="display:none">
+        <label>num</label>
+        <input type="number" id="dGiftNum" value="1" min="1">
+      </div>
+      <div class="field" id="fPriceYuan" style="display:none">
+        <label>price</label>
+        <input type="number" id="dPriceYuan" value="0" min="0" step="0.1">
+      </div>
+    </div>
+    <div class="preview" id="dPreview"></div>
+    <div class="actions">
+      <button class="btn-send" id="dSendBtn" onclick="sendDanmaku()">Send</button>
+    </div>
+    <div class="status" id="dStatus"></div>
+  </div>
+
+  <!-- Raw JSON Send -->
+  <div class="section">
+    <h2>Raw JSON</h2>
+    <div class="field">
+      <textarea id="jsonInput" spellcheck="false"></textarea>
+    </div>
+    <div class="actions">
+      <button class="btn-send" id="sendBtn" onclick="sendMessage()">Send</button>
+      <button class="btn-secondary" onclick="formatJson()">Format</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <!-- Log -->
+  <div class="log">
+    <h2>Log <button class="btn-secondary" style="padding:4px 12px; font-size:12px; margin-left:8px;" onclick="clearLog()">Clear</button></h2>
+    <div class="log-list" id="logList"></div>
+  </div>
+</div>
+
+<!-- Live Settings Modal -->
+<div class="modal-overlay" id="liveModal" onclick="closeModalOverlay(event)">
+  <div class="modal">
+    <h2>Live Settings</h2>
+    <div class="field">
+      <label>Platform</label>
+      <select id="platform" onchange="onPlatformChange()">
+        <option value="bilibili">Bilibili</option>
+        <option value="youtube">YouTube</option>
+      </select>
+    </div>
+
+    <!-- Bilibili platform fields -->
+    <div id="biliPlatformFields">
+      <div class="field">
+        <label>Connect Mode</label>
+        <select id="connectMode" onchange="onConnectModeChange()">
+          <option value="guest">Guest (no login)</option>
+          <option value="web">Web (SESSDATA)</option>
+          <option value="open_live">Open Live (主播码)</option>
+        </select>
+      </div>
+      <div class="field" id="roomIdField">
+        <label>Room ID</label>
+        <input type="text" id="roomId" placeholder="e.g. 22778610">
+      </div>
+      <div id="webModeFields">
+        <div class="field">
+          <label>SESSDATA</label>
+          <input type="text" id="sessdata" placeholder="from browser cookies" value="">
+        </div>
+      </div>
+      <div id="openLiveModeFields" style="display:none">
+        <div class="field">
+          <label>Auth Code (主播码)</label>
+          <input type="text" id="authCode" placeholder="主播码/身份码">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Access Key ID</label>
+            <input type="text" id="olKeyId" value="">
+          </div>
+          <div class="field">
+            <label>Access Key Secret</label>
+            <input type="text" id="olKeySecret" value="">
+          </div>
+        </div>
+        <div class="field" style="max-width: 160px;">
+          <label>App ID</label>
+          <input type="number" id="olAppId" value="0">
+        </div>
+      </div>
+
+      <!-- Block Rules -->
+      <div style="margin-top: 16px; margin-bottom: 12px; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 12px; font-weight: 600; letter-spacing: 0.5px;">Block Rules</div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="blockGiftDanmaku">
+        <label for="blockGiftDanmaku">Block gift danmaku</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="blockNewbie">
+        <label for="blockNewbie">Block newbie (informal members)</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="blockNotMobileVerified">
+        <label for="blockNotMobileVerified">Block unverified (no mobile)</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="blockMirrorMessages">
+        <label for="blockMirrorMessages">Block mirror messages (cross-room)</label>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Min user level</label>
+          <input type="number" id="blockLevel" value="0" min="0">
+        </div>
+        <div class="field">
+          <label>Min medal level</label>
+          <input type="number" id="blockMedalLevel" value="0" min="0">
+        </div>
+      </div>
+      <div class="field">
+        <label>Block keywords <span style="font-weight:400; color:#999;">(one per line)</span></label>
+        <textarea id="blockKeywords" spellcheck="false" style="height: 60px; font-size: 12px;" placeholder="keyword1&#10;keyword2"></textarea>
+      </div>
+      <div class="field">
+        <label>Block users <span style="font-weight:400; color:#999;">(one per line)</span></label>
+        <textarea id="blockUsers" spellcheck="false" style="height: 60px; font-size: 12px;" placeholder="username1&#10;username2"></textarea>
+      </div>
+    </div>
+
+    <!-- YouTube platform fields -->
+    <div id="ytPlatformFields" style="display:none">
+      <div class="field">
+        <label>Video / Stream URL</label>
+        <input type="text" id="ytUrl" placeholder="https://www.youtube.com/watch?v=...">
+      </div>
+    </div>
+
+    <div class="checkbox-row" style="margin-top: 16px;">
+      <input type="checkbox" id="autoForward" checked>
+      <label for="autoForward">Auto-forward to Unity</label>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="forwardGifts" checked>
+      <label for="forwardGifts">Include gifts & super chats</label>
+    </div>
+    <div class="actions">
+      <button class="btn-send" onclick="saveLiveSettings()">Save</button>
+      <button class="btn-secondary" onclick="closeModal('liveModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Unity Settings Modal -->
+<div class="modal-overlay" id="unityModal" onclick="closeModalOverlay(event)">
+  <div class="modal">
+    <h2>Unity Settings</h2>
+    <div class="field">
+      <label>Endpoint</label>
+      <input type="text" id="endpoint" value="http://localhost:7890/send">
+    </div>
+    <div class="field" style="max-width: 200px;">
+      <label>Pipeline Destination</label>
+      <input type="number" id="bliveDestination" value="0">
+    </div>
+    <div class="actions">
+      <button class="btn-send" onclick="saveUnitySettings()">Save</button>
+      <button class="btn-secondary" onclick="closeModal('unityModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Frontend Settings Modal -->
+<div class="modal-overlay" id="frontendModal" onclick="closeModalOverlay(event)">
+  <div class="modal" style="max-width: 600px;">
+    <h2>Frontend Settings</h2>
+    <div class="field">
+      <label>Custom CSS <span style="font-weight:400; color:#999;">(paste blivechat Style Generator output here)</span></label>
+      <textarea id="customCss" spellcheck="false" style="height: 240px; font-size: 12px;"></textarea>
+    </div>
+    <div class="field" style="margin-top: 16px;">
+      <label>Livechat Overlay</label>
+      <a href="/livechat/" target="_blank" style="font-size: 14px; color: #111;">Open Livechat →</a>
+    </div>
+    <div class="actions">
+      <button class="btn-send" onclick="saveFrontendSettings()">Save</button>
+      <button class="btn-secondary" onclick="closeModal('frontendModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Right Panel: Live Feed -->
+<div class="right-panel">
+  <div class="feed-header">
+    <span>Live Feed <button class="btn-secondary" style="padding:4px 12px; font-size:12px; margin-left:8px;" onclick="clearFeed()">Clear</button></span>
+    <span class="feed-count" id="feedCount"></span>
+  </div>
+  <div class="feed-list" id="feedList">
+    <div class="feed-empty" id="feedEmpty">Waiting for messages...</div>
+  </div>
+</div>
+
+<script>
+let connected = false;
+let ws = null;
+
+// ─── msg_type → visible fields mapping ───
+const MSG_TYPE_FIELDS = {
+  danmaku:    { text: true,  textLabel: 'text',      guardLevel: true,  giftNum: false, priceYuan: false },
+  gift:       { text: true,  textLabel: 'gift name',  guardLevel: false, giftNum: true,  priceYuan: true  },
+  super_chat: { text: true,  textLabel: 'message',    guardLevel: false, giftNum: false, priceYuan: true  },
+  guard:      { text: false, textLabel: 'text',       guardLevel: true,  giftNum: false, priceYuan: false },
+};
+
+function onMsgTypeChange() {
+  const type = document.getElementById('dMsgType').value;
+  const cfg = MSG_TYPE_FIELDS[type] || MSG_TYPE_FIELDS.danmaku;
+
+  document.getElementById('dText').parentElement.style.display = cfg.text ? '' : 'none';
+  document.getElementById('dText').previousElementSibling.textContent = cfg.textLabel;
+  document.getElementById('fGuardLevel').style.display = cfg.guardLevel ? '' : 'none';
+  document.getElementById('fGiftNum').style.display = cfg.giftNum ? '' : 'none';
+  document.getElementById('fPriceYuan').style.display = cfg.priceYuan ? '' : 'none';
+  updatePreview();
+}
+
+// ─── Build YYMessage from fields ───
+function buildYYMessage() {
+  const dest = parseInt(document.getElementById('bliveDestination').value) || 0;
+  const type = document.getElementById('dMsgType').value;
+  const cfg = MSG_TYPE_FIELDS[type] || MSG_TYPE_FIELDS.danmaku;
+
+  const contentObj = {
+    user: document.getElementById('dUser').value,
+    msg_type: type,
+    destination: -2,
+  };
+
+  if (cfg.text) contentObj.text = document.getElementById('dText').value;
+  if (cfg.guardLevel) contentObj.guard_level = parseInt(document.getElementById('dGuardLevel').value) || 0;
+  if (cfg.giftNum) contentObj.num = parseInt(document.getElementById('dGiftNum').value) || 1;
+  if (cfg.priceYuan) contentObj.price = parseFloat(document.getElementById('dPriceYuan').value) || 0;
+
+  return {
+    signal: '',
+    content: JSON.stringify(contentObj),
+    destination: dest,
+  };
+}
+
+function updatePreview() {
+  const msg = buildYYMessage();
+  document.getElementById('dPreview').textContent = JSON.stringify(msg, null, 2);
+}
+
+async function loadAvatarList() {
+  try {
+    const res = await fetch('/api/avatars');
+    const list = await res.json();
+    const sel = document.getElementById('dFaceSelect');
+    // Keep first option
+    sel.innerHTML = '<option value="">-- select --</option>';
+    list.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.url;
+      opt.textContent = a.name;
+      sel.appendChild(opt);
+    });
+  } catch (e) {}
+}
+
+function onAvatarSelect() {
+  const url = document.getElementById('dFaceSelect').value;
+  if (url) document.getElementById('dFace').value = url;
+}
+
+async function handleAvatarUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res = await fetch('/api/upload-avatar', { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.url) {
+      document.getElementById('dFace').value = data.url;
+      loadAvatarList();
+    } else {
+      alert(data.error || 'Upload failed');
+    }
+  } catch (e) {
+    alert('Upload error: ' + e.message);
+  }
+}
+
+// Update preview on any field change
+['dText','dUser','dMsgType','dGuardLevel','dGiftNum','dPriceYuan','bliveDestination'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updatePreview);
+  document.getElementById(id).addEventListener('change', updatePreview);
+});
+onMsgTypeChange();
+
+async function sendDanmaku() {
+  const btn = document.getElementById('dSendBtn');
+  const type = document.getElementById('dMsgType').value;
+  const cfg = MSG_TYPE_FIELDS[type] || MSG_TYPE_FIELDS.danmaku;
+
+  const payload = {
+    msg_type: type,
+    user: document.getElementById('dUser').value,
+    face: document.getElementById('dFace').value,
+    destination: parseInt(document.getElementById('bliveDestination').value) || 0,
+  };
+  if (cfg.text) payload.text = document.getElementById('dText').value;
+  if (cfg.guardLevel) payload.guard_level = parseInt(document.getElementById('dGuardLevel').value) || 0;
+  if (cfg.giftNum) payload.num = parseInt(document.getElementById('dGiftNum').value) || 1;
+  if (cfg.priceYuan) payload.price = parseFloat(document.getElementById('dPriceYuan').value) || 0;
+
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/send-danmaku', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.status === 200) {
+      showDanmakuStatus('success', `${data.status} — ${data.result}`);
+      addLog('manual', `${document.getElementById('dUser').value}: ${document.getElementById('dText').value}`);
+    } else if (data.status === 0) {
+      showDanmakuStatus('error', 'Connection failed: ' + data.result);
+    } else {
+      showDanmakuStatus('error', `${data.status} — ${data.result}`);
+    }
+  } catch (e) {
+    showDanmakuStatus('error', 'Server error: ' + e.message);
+  }
+  btn.disabled = false;
+}
+
+// Ctrl+Enter in text field to send
+document.getElementById('dText').addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key === 'Enter') {
+    e.preventDefault();
+    sendDanmaku();
+  }
+});
+
+// ─── Server WebSocket for real-time updates ───
+function connectServerWS() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}/ws`);
+
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      handleServerMessage(msg);
+    } catch (e) {}
+  };
+
+  ws.onclose = () => {
+    setTimeout(connectServerWS, 2000);
+  };
+}
+
+function handleServerMessage(msg) {
+  if (msg.type === 'status') {
+    connected = msg.connected;
+    if (msg.connected) {
+      currentRoomInfo = msg.mode === 'open_live' ? `Open Live: ${msg.roomId}` : `Room ${msg.roomId}`;
+      showBliveStatus('success', 'Connected to room ' + msg.roomId);
+    } else if (msg.error) {
+      currentRoomInfo = '';
+      showBliveStatus('error', msg.error);
+    } else {
+      currentRoomInfo = '';
+      showBliveStatus('info', 'Disconnected');
+    }
+    updateUI();
+  } else if (msg.type === 'log') {
+    addLog(msg.tag, msg.msg);
+  } else if (msg.type === 'feed') {
+    addFeedItem(msg);
+  } else if (msg.type === 'stats') {
+    updateStats(msg.received, msg.forwarded);
+  } else if (msg.connected !== undefined) {
+    // Initial state — restore all fields from server
+    connected = msg.connected;
+    if (msg.roomId) {
+      document.getElementById('roomId').value = msg.roomId;
+      currentRoomInfo = msg.connectMode === 'open_live' ? `Open Live: ${msg.roomId}` : `Room ${msg.roomId}`;
+    }
+    if (msg.authCode) {
+      document.getElementById('authCode').value = msg.authCode;
+    }
+    if (msg.platform) {
+      document.getElementById('platform').value = msg.platform;
+      currentPlatform = msg.platform;
+    }
+    if (msg.connectMode) {
+      document.getElementById('connectMode').value = msg.connectMode;
+      currentConnectMode = msg.connectMode;
+    }
+    if (msg.unityEndpoint) document.getElementById('endpoint').value = msg.unityEndpoint;
+    if (msg.pipelineDestination !== undefined) document.getElementById('bliveDestination').value = msg.pipelineDestination;
+    document.getElementById('autoForward').checked = msg.autoForward;
+    document.getElementById('forwardGifts').checked = msg.forwardGifts;
+    // Bilibili credentials
+    if (msg.sessdata) document.getElementById('sessdata').value = msg.sessdata;
+    if (msg.openLiveKeyId) document.getElementById('olKeyId').value = msg.openLiveKeyId;
+    if (msg.openLiveKeySecret) document.getElementById('olKeySecret').value = msg.openLiveKeySecret;
+    if (msg.openLiveAppId) document.getElementById('olAppId').value = msg.openLiveAppId;
+    // Unity
+    if (msg.unityConnected !== undefined) unityConnected = msg.unityConnected;
+    // Frontend
+    if (msg.customCss) document.getElementById('customCss').value = msg.customCss;
+    // Block rules
+    if (msg.blockGiftDanmaku !== undefined) document.getElementById('blockGiftDanmaku').checked = msg.blockGiftDanmaku;
+    if (msg.blockNewbie !== undefined) document.getElementById('blockNewbie').checked = msg.blockNewbie;
+    if (msg.blockNotMobileVerified !== undefined) document.getElementById('blockNotMobileVerified').checked = msg.blockNotMobileVerified;
+    if (msg.blockMirrorMessages !== undefined) document.getElementById('blockMirrorMessages').checked = msg.blockMirrorMessages;
+    if (msg.blockLevel !== undefined) document.getElementById('blockLevel').value = msg.blockLevel;
+    if (msg.blockMedalLevel !== undefined) document.getElementById('blockMedalLevel').value = msg.blockMedalLevel;
+    if (msg.blockKeywords) document.getElementById('blockKeywords').value = msg.blockKeywords;
+    if (msg.blockUsers) document.getElementById('blockUsers').value = msg.blockUsers;
+    onPlatformChange();
+    onConnectModeChange();
+    updateUI();
+    updateUnityUI();
+    updateStats(msg.received, msg.forwarded);
+    updatePreview();
+  }
+}
+
+// ─── Modal Helpers ───
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+function closeModalOverlay(e) {
+  if (e.target === e.currentTarget) e.target.classList.remove('open');
+}
+
+// ─── Platform & Connect Mode Toggle ───
+let currentPlatform = 'bilibili';
+let currentConnectMode = 'guest';
+
+function onPlatformChange() {
+  const p = document.getElementById('platform').value;
+  currentPlatform = p;
+  document.getElementById('biliPlatformFields').style.display = p === 'bilibili' ? '' : 'none';
+  document.getElementById('ytPlatformFields').style.display = p === 'youtube' ? '' : 'none';
+}
+
+function onConnectModeChange() {
+  const mode = document.getElementById('connectMode').value;
+  currentConnectMode = mode;
+  document.getElementById('roomIdField').style.display = (mode === 'web' || mode === 'guest') ? '' : 'none';
+  document.getElementById('webModeFields').style.display = mode === 'web' ? '' : 'none';
+  document.getElementById('openLiveModeFields').style.display = mode === 'open_live' ? '' : 'none';
+}
+
+// ─── Live Room Connection ───
+async function toggleLiveRoom() {
+  if (connected) {
+    await fetch('/api/disconnect', { method: 'POST' });
+  } else {
+    showBliveStatus('info', 'Connecting...');
+    try {
+      const res = await fetch('/api/connect', { method: 'POST' });
+      const data = await res.json();
+      if (!data.connected) {
+        showBliveStatus('error', data.error || 'Connection failed');
+      }
+    } catch (e) {
+      showBliveStatus('error', 'Server error: ' + e.message);
+    }
+  }
+}
+
+// ─── Unity Connection (frontend only) ───
+let unityConnected = false;
+
+async function toggleUnity() {
+  const res = await fetch('/api/unity-toggle', { method: 'POST' });
+  const data = await res.json();
+  unityConnected = data.connected;
+  updateUnityUI();
+}
+
+function updateUnityUI() {
+  const btn = document.getElementById('unityConnectBtn');
+  const indicator = document.getElementById('unityIndicator');
+  const display = document.getElementById('unityEndpointDisplay');
+  btn.textContent = unityConnected ? 'Disconnect' : 'Connect';
+  btn.className = unityConnected ? 'btn-danger' : 'btn-send';
+  indicator.className = unityConnected ? 'indicator on' : 'indicator off';
+  display.textContent = document.getElementById('endpoint').value;
+}
+
+// ─── Settings Save (per-modal) ───
+async function saveLiveSettings() {
+  const settings = {
+    platform: document.getElementById('platform').value,
+    connectMode: document.getElementById('connectMode').value,
+    roomId: document.getElementById('roomId').value.trim(),
+    authCode: document.getElementById('authCode').value.trim(),
+    sessdata: document.getElementById('sessdata').value.trim(),
+    openLiveKeyId: document.getElementById('olKeyId').value.trim(),
+    openLiveKeySecret: document.getElementById('olKeySecret').value.trim(),
+    openLiveAppId: parseInt(document.getElementById('olAppId').value) || 0,
+    autoForward: document.getElementById('autoForward').checked,
+    forwardGifts: document.getElementById('forwardGifts').checked,
+    blockGiftDanmaku: document.getElementById('blockGiftDanmaku').checked,
+    blockNewbie: document.getElementById('blockNewbie').checked,
+    blockNotMobileVerified: document.getElementById('blockNotMobileVerified').checked,
+    blockMirrorMessages: document.getElementById('blockMirrorMessages').checked,
+    blockLevel: parseInt(document.getElementById('blockLevel').value) || 0,
+    blockMedalLevel: parseInt(document.getElementById('blockMedalLevel').value) || 0,
+    blockKeywords: document.getElementById('blockKeywords').value,
+    blockUsers: document.getElementById('blockUsers').value,
+  };
+  await fetch('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings)
+  });
+  updateRoomDisplay();
+  closeModal('liveModal');
+}
+
+async function saveUnitySettings() {
+  const settings = {
+    unityEndpoint: document.getElementById('endpoint').value.trim(),
+    pipelineDestination: parseInt(document.getElementById('bliveDestination').value) || 0,
+  };
+  await fetch('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings)
+  });
+  updateUnityUI();
+  closeModal('unityModal');
+}
+
+async function saveFrontendSettings() {
+  const settings = {
+    customCss: document.getElementById('customCss').value,
+  };
+  await fetch('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings)
+  });
+  closeModal('frontendModal');
+}
+
+function updateUI() {
+  const indicator = document.getElementById('bliveIndicator');
+  const btn = document.getElementById('connectBtn');
+  if (connected) {
+    btn.textContent = 'Disconnect';
+    btn.className = 'btn-danger';
+  } else {
+    btn.textContent = 'Connect';
+    btn.className = 'btn-send';
+  }
+  indicator.className = connected ? 'indicator on' : 'indicator off';
+  updateRoomDisplay();
+}
+
+function updateRoomDisplay() {
+  const display = document.getElementById('bliveRoomDisplay');
+  if (connected && currentRoomInfo) {
+    display.textContent = currentRoomInfo;
+  } else {
+    // Show configured room from modal fields
+    const mode = document.getElementById('connectMode').value;
+    if (mode === 'open_live') {
+      const auth = document.getElementById('authCode').value.trim();
+      display.textContent = auth ? `Open Live: ${auth.slice(0,8)}...` : '';
+    } else {
+      const rid = document.getElementById('roomId').value.trim();
+      display.textContent = rid ? `Room ${rid}` : '';
+    }
+  }
+}
+
+let currentRoomInfo = '';
+
+function updateStats(received, forwarded) {
+  const el = document.getElementById('bliveStats');
+  if (received !== undefined) {
+    el.textContent = `Received: ${received} | Forwarded: ${forwarded}`;
+  }
+}
+
+// ─── Raw JSON Send ───
+async function sendMessage() {
+  const jsonStr = document.getElementById('jsonInput').value.trim();
+  const btn = document.getElementById('sendBtn');
+
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (e) {
+    showManualStatus('error', 'Invalid JSON: ' + e.message);
+    return;
+  }
+
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(parsed)
+    });
+    const data = await res.json();
+    if (data.status === 200) {
+      showManualStatus('success', `${data.status} — ${data.result}`);
+      addLog('manual', JSON.stringify(parsed));
+    } else if (data.status === 0) {
+      showManualStatus('error', 'Connection failed: ' + data.result);
+    } else {
+      showManualStatus('error', `${data.status} — ${data.result}`);
+    }
+  } catch (e) {
+    showManualStatus('error', 'Server error: ' + e.message);
+  }
+  btn.disabled = false;
+}
+
+function formatJson() {
+  const textarea = document.getElementById('jsonInput');
+  try {
+    const parsed = JSON.parse(textarea.value);
+    textarea.value = JSON.stringify(parsed, null, 2);
+    showManualStatus('success', 'Formatted');
+  } catch (e) {
+    showManualStatus('error', 'Invalid JSON: ' + e.message);
+  }
+}
+
+// ─── UI Helpers ───
+function showDanmakuStatus(type, msg) {
+  const el = document.getElementById('dStatus');
+  el.className = 'status ' + type;
+  el.textContent = msg;
+}
+
+function showBliveStatus(type, msg) {
+  const el = document.getElementById('bliveStatus');
+  el.className = 'status ' + type;
+  el.textContent = msg;
+}
+
+function showManualStatus(type, msg) {
+  const el = document.getElementById('status');
+  el.className = 'status ' + type;
+  el.textContent = msg;
+}
+
+function addLog(tag, msg) {
+  const list = document.getElementById('logList');
+  const time = new Date().toLocaleTimeString();
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-time">${time}</span><span class="log-tag ${tag}">${tag}</span><span class="log-msg">${escapeHtml(msg)}</span>`;
+  list.insertBefore(entry, list.firstChild);
+  while (list.children.length > 500) {
+    list.removeChild(list.lastChild);
+  }
+}
+
+function clearLog() {
+  document.getElementById('logList').innerHTML = '';
+}
+
+function clearFeed() {
+  document.getElementById('feedList').innerHTML = '<div class="feed-empty" id="feedEmpty">Waiting for messages...</div>';
+  feedCount = 0;
+  document.getElementById('feedCount').textContent = '';
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Ctrl+Enter in raw JSON
+document.getElementById('jsonInput').addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key === 'Enter') {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// ─── Live Feed (forwarded messages only) ───
+let feedCount = 0;
+
+function addFeedItem(data) {
+  const list = document.getElementById('feedList');
+  const empty = document.getElementById('feedEmpty');
+  if (empty) empty.remove();
+
+  feedCount++;
+  document.getElementById('feedCount').textContent = feedCount;
+
+  const item = document.createElement('div');
+  item.className = 'feed-item';
+  const user = escapeHtml(data.user || '');
+  const text = escapeHtml(data.text || '');
+
+  const guardClass = {1:'governor',2:'admiral',3:'captain'}[data.guard_level] || '';
+  const userHtml = `<span class="feed-user ${guardClass}">${user}</span>`;
+
+  if (data.msg_type === 'danmaku') {
+    const badge = guardClass ? `<span class="feed-badge guard">${guardClass}</span>` : '';
+    item.innerHTML = `${badge}${userHtml} ${text}`;
+  } else if (data.msg_type === 'gift') {
+    const price = data.price > 0 ? ` ¥${data.price}` : '';
+    item.innerHTML = `<span class="feed-badge gift">gift</span>${userHtml} ${text} x${data.num}${price}`;
+  } else if (data.msg_type === 'super_chat') {
+    item.innerHTML = `<span class="feed-badge sc">SC ¥${data.price}</span>${userHtml} ${text}`;
+  } else if (data.msg_type === 'guard') {
+    const names = {1:'Governor',2:'Admiral',3:'Captain'};
+    const name = names[data.guard_level] || 'Guard';
+    const num = data.num > 1 ? ` x${data.num}` : '';
+    const price = data.price > 0 ? ` ¥${data.price}` : '';
+    item.innerHTML = `<span class="feed-badge guard">${name}</span>${userHtml}${num}${price}`;
+  } else if (data.msg_type === 'pipeline') {
+    item.innerHTML = `<span class="feed-badge pipeline">${user}</span> ${text}`;
+  }
+
+  list.prepend(item);
+  while (list.children.length > 200) {
+    list.removeChild(list.lastChild);
+  }
+}
+
+connectServerWS();
+loadAvatarList();
+</script>
+</body>
+</html>

@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="referrer" content="no-referrer">
+<title>YACHIO Livechat</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="/livechat-custom.css">
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: transparent;
+    font-family: 'Roboto', 'Noto Sans', 'Segoe UI', sans-serif;
+  }
+  /* Fix: #item-offset needs height so #items absolute positioning works */
+  #item-offset.yt-live-chat-item-list-renderer {
+    height: 100%;
+  }
+  /* Repeated message badge */
+  .repeat-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 0 6px;
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    font-size: 12px;
+    font-family: sans-serif;
+    color: #fff;
+    background-color: hsl(210, 100%, 62.5%);
+    border-radius: 9px;
+    text-shadow: none;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+
+<yt-live-chat-renderer hide-timestamps>
+  <yt-live-chat-item-list-renderer class="yt-live-chat-renderer">
+    <div id="contents" class="yt-live-chat-item-list-renderer">
+      <div id="item-scroller" class="animated yt-live-chat-item-list-renderer">
+        <div id="item-offset" class="yt-live-chat-item-list-renderer">
+          <div id="items" class="yt-live-chat-item-list-renderer">
+          </div>
+        </div>
+      </div>
+    </div>
+  </yt-live-chat-item-list-renderer>
+</yt-live-chat-renderer>
+
+<script>
+const MAX_MESSAGES = 80;
+const MERGE_WINDOW = 5;
+const items = document.getElementById('items');
+
+// Track recent messages for merge lookups
+// Each entry: { el, type, text, user, giftName, num, price, repeated }
+const recentMessages = [];
+
+// ─── SC / Gift price tier colors (7 tiers, YouTube-compatible) ───
+const PRICE_TIERS = [
+  // [minYuan, primaryColor, secondaryColor, headerColor, authorNameColor, messageColor]
+  [1000, '#D00000',  '#E62117',  '#fff', 'rgba(255,255,255,0.7)', '#fff'],
+  [500,  '#C2185B',  '#E91E63',  '#fff', 'rgba(255,255,255,0.7)', '#fff'],
+  [100,  '#E65100',  '#F4511E',  '#fff', 'rgba(255,255,255,0.7)', '#fff'],
+  [50,   '#FFB300',  '#FFCA28',  '#000', 'rgba(0,0,0,0.54)',      '#000'],
+  [10,   '#00C853',  '#00E676',  '#000', 'rgba(0,0,0,0.54)',      '#000'],
+  [0.1,  '#00BFA5',  '#00BFA5',  '#000', 'rgba(0,0,0,0.54)',      '#000'],
+  [0,    '#1565C0',  '#1565C0',  '#fff', 'rgba(255,255,255,0.7)', '#fff'],
+];
+
+function getPriceTier(priceYuan) {
+  for (const tier of PRICE_TIERS) {
+    if (priceYuan >= tier[0]) return tier;
+  }
+  return PRICE_TIERS[PRICE_TIERS.length - 1];
+}
+
+// ─── HTML Escape ───
+function esc(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ─── Render: Text Message (danmaku) ───
+function renderTextMessage(data) {
+  const authorType = data.guard_level > 0 ? 'member' : 'normal';
+  const el = document.createElement('yt-live-chat-text-message-renderer');
+  el.classList.add('yt-live-chat-item-list-renderer');
+  el.setAttribute('author-type', authorType);
+
+  const face = data.face || '';
+  el.innerHTML =
+    `<img id="author-photo" class="yt-live-chat-text-message-renderer"` +
+      ` src="${esc(face)}" width="24" height="24"` +
+      ` referrerpolicy="no-referrer" onerror="this.style.display='none'"` +
+      `${face ? '' : ' style="display:none"'}>` +
+    `<div id="content" class="yt-live-chat-text-message-renderer">` +
+      `<span id="timestamp" class="yt-live-chat-text-message-renderer"></span>` +
+      `<yt-live-chat-author-chip class="yt-live-chat-text-message-renderer">` +
+        `<span id="author-name" class="yt-live-chat-author-chip" type="${authorType}">${esc(data.user)}</span>` +
+        `<span id="chat-badges" class="yt-live-chat-author-chip"></span>` +
+      `</yt-live-chat-author-chip>` +
+      `<span id="message" class="yt-live-chat-text-message-renderer">${esc(data.text)}</span>` +
+    `</div>`;
+
+  return el;
+}
+
+// ─── Render: Paid Message (super_chat / gift) ───
+function renderPaidMessage(data) {
+  const price = data.price || 0;
+  const tier = getPriceTier(price);
+  const [, primary, secondary, headerColor, authorNameColor, messageColor] = tier;
+
+  const el = document.createElement('yt-live-chat-paid-message-renderer');
+  el.classList.add('yt-live-chat-item-list-renderer');
+  el.style.cssText =
+    `--yt-live-chat-paid-message-primary-color: ${primary};` +
+    `--yt-live-chat-paid-message-secondary-color: ${secondary};` +
+    `--yt-live-chat-paid-message-header-color: ${headerColor};` +
+    `--yt-live-chat-paid-message-author-name-color: ${authorNameColor};` +
+    `--yt-live-chat-paid-message-color: ${messageColor};`;
+
+  // Format price display
+  let priceText;
+  if (data.msg_type === 'gift') {
+    priceText = price > 0
+      ? `${esc(data.text)} x${data.num || 1} (¥${price})`
+      : `${esc(data.text)} x${data.num || 1}`;
+  } else {
+    priceText = `¥${price}`;
+  }
+
+  // SC with message, gift without
+  const messageText = data.msg_type === 'super_chat' ? data.text : '';
+  const showOnlyHeader = !messageText;
+  if (showOnlyHeader) {
+    el.setAttribute('show-only-header', '');
+  }
+
+  el.innerHTML =
+    `<div id="card" class="yt-live-chat-paid-message-renderer">` +
+      `<div id="header" class="yt-live-chat-paid-message-renderer">` +
+        `<img id="author-photo" class="yt-live-chat-paid-message-renderer"` +
+          ` src="${esc(data.face || '')}" width="40" height="40"` +
+          ` referrerpolicy="no-referrer" onerror="this.style.display='none'"` +
+          `${data.face ? '' : ' style="display:none"'}>` +
+        `<div id="header-content" class="yt-live-chat-paid-message-renderer">` +
+          `<div id="header-content-primary-column" class="yt-live-chat-paid-message-renderer">` +
+            `<span id="author-name" class="yt-live-chat-paid-message-renderer">${esc(data.user)}</span>` +
+            `<span id="purchase-amount" class="yt-live-chat-paid-message-renderer">${priceText}</span>` +
+          `</div>` +
+        `</div>` +
+      `</div>` +
+      `<div id="content" class="yt-live-chat-paid-message-renderer">` +
+        `<div id="message" class="yt-live-chat-paid-message-renderer">${esc(messageText)}</div>` +
+      `</div>` +
+    `</div>`;
+
+  return el;
+}
+
+// ─── Render: Membership Item (guard buy) ───
+function renderMembershipItem(data) {
+  const guardNames = { 1: 'Governor', 2: 'Admiral', 3: 'Captain' };
+  const guardName = guardNames[data.guard_level] || data.text || 'Member';
+
+  const el = document.createElement('yt-live-chat-membership-item-renderer');
+  el.classList.add('yt-live-chat-item-list-renderer');
+  el.setAttribute('show-only-header', '');
+
+  el.innerHTML =
+    `<div id="card" class="yt-live-chat-membership-item-renderer">` +
+      `<div id="header" class="yt-live-chat-membership-item-renderer">` +
+        `<img id="author-photo" class="yt-live-chat-membership-item-renderer"` +
+          ` src="${esc(data.face || '')}" width="40" height="40"` +
+          ` referrerpolicy="no-referrer" onerror="this.style.display='none'"` +
+          `${data.face ? '' : ' style="display:none"'}>` +
+        `<div id="header-content" class="yt-live-chat-membership-item-renderer">` +
+          `<div id="header-content-primary-column" class="yt-live-chat-membership-item-renderer">` +
+            `<div id="header-content-inner-column" class="yt-live-chat-membership-item-renderer">` +
+              `<yt-live-chat-author-chip class="yt-live-chat-membership-item-renderer">` +
+                `<span id="author-name" class="yt-live-chat-author-chip" type="member">${esc(data.user)}</span>` +
+              `</yt-live-chat-author-chip>` +
+            `</div>` +
+            `<div id="header-subtext" class="yt-live-chat-membership-item-renderer">${esc(guardName)}</div>` +
+          `</div>` +
+        `</div>` +
+      `</div>` +
+    `</div>`;
+
+  return el;
+}
+
+// ─── Repeated badge color (HSL interpolation, blue→pink) ───
+function repeatedBadgeColor(count) {
+  const START = [210, 100, 62.5];  // blue
+  const END = [360, 87.3, 69.2];   // pink
+  let c;
+  if (count <= 2) c = START;
+  else if (count >= 10) c = END;
+  else {
+    const t = (count - 2) / 8;
+    c = START.map((s, i) => s + (END[i] - s) * t);
+  }
+  return `hsl(${c[0]}, ${c[1]}%, ${c[2]}%)`;
+}
+
+// ─── Update or create repeated badge on a text message ───
+function updateRepeatedBadge(entry) {
+  const msgSpan = entry.el.querySelector('#message');
+  if (!msgSpan) return;
+  let badge = msgSpan.querySelector('.repeat-badge');
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.className = 'repeat-badge';
+    msgSpan.appendChild(badge);
+  }
+  const display = entry.repeated > 99 ? '99+' : entry.repeated;
+  badge.textContent = display;
+  badge.style.backgroundColor = repeatedBadgeColor(entry.repeated);
+}
+
+// ─── Iterate recent N messages (all types, newest first) ───
+// Matches blivechat's iterRecentMessages: counts all message types toward the window
+function* iterRecent(n) {
+  for (let i = recentMessages.length - 1; i >= 0 && n > 0; i--) {
+    yield recentMessages[i];
+    n--;
+  }
+}
+
+// ─── Merge: similar text in recent messages ───
+function mergeSimilarText(text) {
+  const lower = text.trim().toLowerCase();
+  for (const m of iterRecent(MERGE_WINDOW)) {
+    if (m.type !== 'danmaku') continue;
+    const mLower = m.text.trim().toLowerCase();
+    const longer = lower.length >= mLower.length ? lower : mLower;
+    const shorter = lower.length >= mLower.length ? mLower : lower;
+    if (longer.indexOf(shorter) !== -1 && (longer.length - shorter.length) < shorter.length) {
+      m.repeated++;
+      updateRepeatedBadge(m);
+      return true;
+    }
+  }
+  return false;
+}
+
+// ─── Merge: same gift from same user ───
+function mergeSimilarGift(data) {
+  for (const m of iterRecent(MERGE_WINDOW)) {
+    if (m.type === 'gift' && m.user === data.user && m.giftName === data.text) {
+      m.num += (data.num || 1);
+      m.price += (data.price || 0);
+      // Update displayed text
+      const amountEl = m.el.querySelector('#purchase-amount');
+      if (amountEl) {
+        const priceText = m.price > 0
+          ? `${esc(m.giftName)} x${m.num} (¥${m.price})`
+          : `${esc(m.giftName)} x${m.num}`;
+        amountEl.textContent = priceText;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+// ─── Append message to chat ───
+function appendMessage(el, entry) {
+  items.appendChild(el);
+  recentMessages.push(entry);
+  // Remove old messages over limit
+  while (items.children.length > MAX_MESSAGES) {
+    items.removeChild(items.firstChild);
+    recentMessages.shift();
+  }
+}
+
+// ─── Handle incoming feed message ───
+function handleFeed(data) {
+  switch (data.msg_type) {
+    case 'danmaku': {
+      if (mergeSimilarText(data.text)) return;
+      const el = renderTextMessage(data);
+      appendMessage(el, { el, type: 'danmaku', text: data.text, repeated: 1 });
+      break;
+    }
+    case 'gift': {
+      if (mergeSimilarGift(data)) return;
+      const el = renderPaidMessage(data);
+      appendMessage(el, {
+        el, type: 'gift', user: data.user, giftName: data.text,
+        num: data.num || 1, price: data.price || 0,
+      });
+      break;
+    }
+    case 'super_chat': {
+      const el = renderPaidMessage(data);
+      appendMessage(el, { el, type: 'super_chat' });
+      break;
+    }
+    case 'guard': {
+      const el = renderMembershipItem(data);
+      appendMessage(el, { el, type: 'guard' });
+      break;
+    }
+  }
+}
+
+// ─── CSS Hot-reload ───
+const customCssLink = document.querySelector('link[href="/livechat-custom.css"]');
+function reloadCustomCSS() {
+  if (!customCssLink) return;
+  // Cache-bust by appending timestamp
+  customCssLink.href = '/livechat-custom.css?t=' + Date.now();
+}
+
+// ─── WebSocket Connection ───
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${proto}//${location.host}/ws`);
+
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'feed') {
+        handleFeed(msg);
+      } else if (msg.type === 'css_update') {
+        reloadCustomCSS();
+      }
+    } catch (e) {}
+  };
+
+  ws.onclose = () => {
+    setTimeout(connectWS, 2000);
+  };
+
+  ws.onerror = () => {
+    ws.close();
+  };
+}
+
+// ─── Load custom CSS from URL parameter ───
+(function loadCustomCSS() {
+  const params = new URLSearchParams(location.search);
+  const cssPath = params.get('css');
+  if (cssPath) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = cssPath;
+    document.head.appendChild(link);
+  }
+})();
+
+connectWS();
+</script>
+</body>
+</html>
