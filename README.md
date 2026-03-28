@@ -1,19 +1,29 @@
 # YACHIYO Gateway
 
-Gateway server for live streaming message processing. Receives live chat messages, applies filters, and routes to display (livechat overlay) and forwarding (Unity pipeline) modules.
+Live streaming message gateway. Receives live chat from streaming platforms, applies filters, and routes to livechat overlay (OBS) and Unity pipeline.
 
 ## Architecture
 
+Three separate services, connected via HTTP/WebSocket:
+
 ```
-Live Source (Bilibili / ...)
-    |  (blivedm WebSocket)
-    v
-live/bilibili.py  (BilibiliLive - receive + filter)
-    |  callbacks: on_message, on_log, on_status_change
-    v
-server.py  (GatewayServer - thin router, HTTP API)
-    |--- livechat/broadcaster.py  (WebSocket broadcast to UI + OBS overlay)
-    |--- unity/client.py          (HTTP POST to Unity pipeline)
+┌─────────────────────────────────────────────────────────┐
+│  YACHIYO Gateway (port 8080)                            │
+│                                                         │
+│  Live Source ──→ server.py (router) ──┬→ livechat/      │
+│  (Bilibili / YouTube)                │   (WebSocket     │
+│                                      │    → OBS overlay)│
+│                                      └→ unity/          │
+│                                         (HTTP POST      │
+│                                          → Unity)       │
+└─────────────────────────────────────────────────────────┘
+         ↕ HTTP POST                    ↕ WebSocket
+┌────────────────────┐          ┌────────────────────────┐
+│  Unity Client      │          │  YACHIYO Server        │
+│  (port 7890)       │←────────→│  (port 8910)           │
+│  ExternalMessage   │ WebSocket│  AI pipeline           │
+│  Manager           │          │                        │
+└────────────────────┘          └────────────────────────┘
 ```
 
 ## Modules
@@ -22,92 +32,61 @@ server.py  (GatewayServer - thin router, HTTP API)
 
 Receives messages from live platforms and emits normalized events via callbacks.
 
-#### live/bilibili.py - Bilibili
+Supported platforms:
+- **Bilibili** (`live/bilibili.py`) — via [blivedm](https://github.com/xfgryujk/blivedm) (git submodule). Modes: guest, web (SESSDATA), Open Live.
+- **YouTube** (`live/youtube.py`) — via [pytchat](https://github.com/taizan-hokuto/pytchat) (git submodule). Connects via video URL.
 
-Connects to Bilibili live rooms via [blivedm](https://github.com/xfgryujk/blivedm) (git submodule).
+Message types: `danmaku`, `gift`, `guard`, `super_chat`.
 
-**Connection modes:**
-
-| Mode | Auth | Input |
-|------|------|-------|
-| guest | None | Room ID |
-| web | SESSDATA cookie | Room ID |
-| open_live | Key ID + Secret + App ID | Streamer auth code |
-
-**Message types and output fields:**
-
-All messages are emitted via `on_message(msg_type, text, user, *, guard_level, num, price, face, should_forward)`.
-
-| msg_type | text | guard_level | num | price | face |
-|----------|------|:-----------:|:---:|:-----:|:----:|
-| `danmaku` | Message content | Privilege type (0/1/2/3) | - | - | Avatar URL |
-| `gift` | Gift name | - | Gift count | Total price (yuan) | Avatar URL |
-| `guard` | Guard type name (Captain/Admiral/Governor) | Guard level (1/2/3) | Months purchased | Total price (yuan) | Avatar URL |
-| `super_chat` | SC message content | - | - | Price (yuan) | Avatar URL |
-
-Additional event-only messages (on_log only, no on_message):
-- `interact_word_v2`: Enter room, follow, share, like (web/guest)
-- `like`, `enter_room`: Like, enter room (Open Live)
-
-**Block rules (blivechat-compatible):**
-
-Filtering follows [blivechat](https://github.com/xfgryujk/blivechat) behavior. Blocked messages still count toward `msg_received`.
-
-| Rule | Danmaku | Gift | Guard | SC |
-|------|:-------:|:----:|:-----:|:--:|
-| blockGiftDanmaku | yes | | | |
-| blockMirrorMessages | yes | | | |
-| blockLevel | yes | | | |
-| blockNewbie | yes | | | |
-| blockNotMobileVerified | yes | | | |
-| blockMedalLevel | yes | | | |
-| blockKeywords | yes | | | yes |
-| blockUsers | yes | | yes | yes |
-
-Open Live mode supports a subset due to API limitations:
-
-| Rule | Danmaku | Gift | Guard | SC |
-|------|:-------:|:----:|:-----:|:--:|
-| blockMirrorMessages | yes* | | | |
-| blockMedalLevel | yes | | | |
-| blockKeywords | yes | | | yes |
-| blockUsers | yes | | yes | yes |
-
-\* `is_mirror` is declared in blivedm's Open Live model but not parsed from API data, so this rule has no effect in practice.
-
-**blivedm aiohttp fix:**
-
-`_CustomClientResponse` converts `CancelledError` in `_wait_released()` to `ClientConnectionError`, preventing silent task death during reconnection.
+Block rules (Bilibili): blockGiftDanmaku, blockMirrorMessages, blockLevel, blockNewbie, blockNotMobileVerified, blockMedalLevel, blockKeywords, blockUsers. Configurable from web UI, persisted to `settings.json`.
 
 ### server.py - Router
 
-Thin routing layer. Receives callbacks from live module, dispatches to output modules. Handles HTTP API, settings persistence, and static file serving.
+Thin routing layer. Receives callbacks from live module, dispatches to output modules. Handles HTTP API, settings persistence, platform hot-swap, and static file serving.
 
-### livechat/ - Display Output
+### livechat/ - Display Output (OBS Overlay)
 
-WebSocket broadcast to connected clients (main UI + OBS browser source overlay).
+WebSocket broadcast to connected clients.
 
-- `broadcaster.py`: Manages WebSocket clients, broadcasts feed/log/status messages
-- `index.html`: YouTube-style chat overlay with yt-live-chat-* custom elements
-- `style.css`: Compatible with blivechat Style Generator CSS
+- `broadcaster.py`: WebSocket client management, feed/log/status broadcast
+- `index.html`: YouTube-style chat overlay (`yt-live-chat-*` custom elements)
+- `style.css`: Base styles, compatible with blivechat Style Generator CSS
 
 ### unity/ - Unity Forwarding
 
-HTTP POST forwarding to Unity's ExternalMessageManager.
+HTTP POST forwarding to Unity's `ExternalMessageManager`.
 
-- `client.py`: Builds YYMessage, forwards to Unity endpoint, handles pipeline events
-- Pipeline event handling: Detects EoS signal and sends `playback_complete` back to Unity
+- `client.py`: Builds `YYMessage`, forwards to Unity endpoint, handles pipeline events (EoS → `playback_complete`)
+
+## API
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Main control UI |
+| GET | `/livechat/` | OBS overlay page |
+| GET | `/ws` | WebSocket (state + live feed) |
+| GET | `/api/state` | Full server state |
+| POST | `/api/connect` | Connect to live platform |
+| POST | `/api/disconnect` | Disconnect |
+| POST | `/api/settings` | Update settings (platform, block rules, etc.) |
+| POST | `/api/unity-toggle` | Toggle Unity forwarding |
+| POST | `/api/send` | Send raw message to Unity |
+| POST | `/api/send-danmaku` | Send structured danmaku through full pipeline |
+| POST | `/api/pipeline-event` | Receive pipeline output from Unity |
+| POST | `/api/upload-avatar` | Upload avatar image (resize to 300x300) |
+| GET | `/api/avatars` | List saved avatars |
 
 ## Usage
 
 ```bash
-python server.py [--port 8080] [--host 127.0.0.1] [--unity-endpoint http://localhost:7890/send]
+source activate yachiyo-gateway
+python server.py [--port 8080] [--host 127.0.0.1]
 ```
 
 ## Test
 
 ```
 test/
-  fake_live_sender.py      # Sends fake messages to gateway (simulates live source)
-  fake_unity_receiver.py   # Receives messages from gateway (simulates Unity)
+  fake_live_sender.py      # Simulates live source → gateway
+  fake_unity_receiver.py   # Simulates Unity ← gateway
 ```
