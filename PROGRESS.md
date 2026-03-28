@@ -1,4 +1,4 @@
-# YACHIO Gateway - Progress
+# YACHIYO Gateway - Progress
 
 ## Current Status
 Gateway server with modular architecture, blivedm integration, block rules, tested and working.
@@ -15,12 +15,12 @@ server.py (GatewayServer — thin router, HTTP handlers)
             ↓
     Unity ExternalMessageManager (port 7890) / Fake Receiver (port 7891)
             ↓ (WebSocket)
-    YACHIO Server (10.81.7.143:8910, vtuber_danmaku pipeline)
+    YACHIYO Server (10.81.7.143:8910, vtuber_danmaku pipeline)
 ```
 
 ### Module Structure
 ```
-YACHIO_gateway/
+YACHIYO_gateway/
   server.py              # Thin router + HTTP handlers + main()
   live/
     __init__.py

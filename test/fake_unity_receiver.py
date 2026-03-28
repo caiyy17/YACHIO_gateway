@@ -2,7 +2,7 @@
 Fake Unity Receiver — simulates Unity's ExternalMessageManager for testing.
 
 Accepts HTTP POST /send from the gateway and logs received messages.
-No real YACHIO server connection needed.
+No real YACHIYO server connection needed.
 
 Usage:
     python test/fake_unity_receiver.py [--port 7891]

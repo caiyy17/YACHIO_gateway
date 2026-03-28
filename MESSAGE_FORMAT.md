@@ -1,4 +1,4 @@
-# YACHIO Gateway - 消息格式参考
+# YACHIYO Gateway - 消息格式参考
 
 ## 架构
 
@@ -7,11 +7,11 @@ Bilibili 直播间
     ↓ (WebSocket, 通过 blivedm)
 blivechat (端口 12450)
     ↓ (WebSocket /api/chat)
-YACHIO Gateway (端口 8080)
+YACHIYO Gateway (端口 8080)
     ↓ (HTTP POST /send)
 Unity ExternalMessageReceiver (端口 7890)
     ↓
-ProcessingPipeline → WebSocketClientModule → YACHIO Server
+ProcessingPipeline → WebSocketClientModule → YACHIYO Server
 ```
 
 ## Blivechat → Gateway (WebSocket)

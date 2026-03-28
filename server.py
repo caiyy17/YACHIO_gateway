@@ -1,5 +1,5 @@
 """
-YACHIO Gateway Server
+YACHIYO Gateway Server
 
 Thin routing layer that connects live receiving modules to output modules:
   live/ (input) → server.py (router) → livechat/ (WebSocket display) + unity/ (forward)
@@ -89,19 +89,27 @@ class GatewayServer:
         await self.unity.stop()
 
     def _save(self):
-        """Persist current settings to file."""
-        data = {}
+        """Persist current settings to file with nested platform configs."""
+        data = load_settings()
+        data['platform'] = self.live.platform
+        # Platform-specific settings nested under platform key
+        data[self.live.platform] = self.live.get_persist_data()
         data.update(self.livechat.get_persist_data())
-        data.update(self.live.get_persist_data())
         data.update(self.unity.get_persist_data())
         save_settings(data)
 
     def get_state(self):
-        """Return full state for API / WebSocket initial push."""
+        """Return full state for API / WebSocket initial push.
+
+        Includes 'saved' key with raw settings.json so the UI can
+        populate fields for non-active platforms without the server
+        needing to know platform-specific field mappings.
+        """
         state = {}
         state.update(self.livechat.get_state())
         state.update(self.live.get_state())
         state.update(self.unity.get_state())
+        state['saved'] = load_settings()
         return state
 
     # ─── Callbacks from Live module ───
@@ -196,6 +204,20 @@ async def handle_api_unity_toggle(request):
 async def handle_api_settings(request):
     gw = request.app['gateway']
     data = await request.json()
+
+    # Platform switch: hot-swap live module if platform changed
+    new_platform = data.get('platform')
+    if new_platform and new_platform != gw.live.platform:
+        await gw.live.stop()
+        saved_config = load_settings()
+        saved_config['platform'] = new_platform
+        gw.live = create_live(
+            saved_config,
+            on_message=gw._handle_live_message,
+            on_log=gw._handle_log,
+            on_status_change=gw._handle_live_status,
+        )
+        await gw.live.start()
 
     # Livechat settings
     if 'customCss' in data:
@@ -343,7 +365,7 @@ def create_app(config):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='YACHIO Gateway Server')
+    parser = argparse.ArgumentParser(description='YACHIYO Gateway Server')
     parser.add_argument('--port', type=int, default=8080, help='Server port (default: 8080)')
     parser.add_argument('--host', type=str, default='127.0.0.1', help='Server host (default: 127.0.0.1)')
     args = parser.parse_args()

@@ -1,4 +1,4 @@
-# YACHIO Gateway
+# YACHIYO Gateway
 
 Gateway server for live streaming message processing. Receives live chat messages, applies filters, and routes to display (livechat overlay) and forwarding (Unity pipeline) modules.
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>YACHIO Gateway</title>
+<title>YACHIYO Gateway</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -382,11 +382,11 @@
 <body>
 <div class="left-panel">
   <div class="header">
-    <h1>YACHIO Gateway</h1>
+    <h1>YACHIYO Gateway</h1>
     <div class="header-spacer"></div>
-    <button class="btn-settings" onclick="openModal('liveModal')">Live</button>
-    <button class="btn-settings" onclick="openModal('unityModal')">Unity</button>
-    <button class="btn-settings" onclick="openModal('frontendModal')">Frontend</button>
+    <button class="btn-settings" onclick="openLiveModal()">Live</button>
+    <button class="btn-settings" onclick="openUnityModal()">Unity</button>
+    <button class="btn-settings" onclick="openFrontendModal()">Frontend</button>
   </div>
 
   <!-- Live Room -->
@@ -591,6 +591,15 @@
         <label>Video / Stream URL</label>
         <input type="text" id="ytUrl" placeholder="https://www.youtube.com/watch?v=...">
       </div>
+      <div style="margin-top: 16px; margin-bottom: 12px; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 12px; font-weight: 600; letter-spacing: 0.5px;">Block Rules</div>
+      <div class="field">
+        <label>Block keywords <span style="font-weight:400; color:#999;">(one per line)</span></label>
+        <textarea id="ytBlockKeywords" spellcheck="false" style="height: 60px; font-size: 12px;" placeholder="keyword1&#10;keyword2"></textarea>
+      </div>
+      <div class="field">
+        <label>Block users <span style="font-weight:400; color:#999;">(one per line)</span></label>
+        <textarea id="ytBlockUsers" spellcheck="false" style="height: 60px; font-size: 12px;" placeholder="username1&#10;username2"></textarea>
+      </div>
     </div>
 
     <div class="checkbox-row" style="margin-top: 16px;">
@@ -781,13 +790,11 @@ async function sendDanmaku() {
       body: JSON.stringify(payload)
     });
     const data = await res.json();
-    if (data.status === 200) {
-      showDanmakuStatus('success', `${data.status} — ${data.result}`);
+    if (data.status === 'ok') {
+      showDanmakuStatus('success', 'Sent');
       addLog('manual', `${document.getElementById('dUser').value}: ${document.getElementById('dText').value}`);
-    } else if (data.status === 0) {
-      showDanmakuStatus('error', 'Connection failed: ' + data.result);
     } else {
-      showDanmakuStatus('error', `${data.status} — ${data.result}`);
+      showDanmakuStatus('error', data.error || 'Send failed');
     }
   } catch (e) {
     showDanmakuStatus('error', 'Server error: ' + e.message);
@@ -844,44 +851,15 @@ function handleServerMessage(msg) {
     // Initial state — restore all fields from server
     connected = msg.connected;
     if (msg.roomId) {
-      document.getElementById('roomId').value = msg.roomId;
       currentRoomInfo = msg.connectMode === 'open_live' ? `Open Live: ${msg.roomId}` : `Room ${msg.roomId}`;
     }
-    if (msg.authCode) {
-      document.getElementById('authCode').value = msg.authCode;
-    }
-    if (msg.platform) {
-      document.getElementById('platform').value = msg.platform;
-      currentPlatform = msg.platform;
-    }
-    if (msg.connectMode) {
-      document.getElementById('connectMode').value = msg.connectMode;
-      currentConnectMode = msg.connectMode;
-    }
+    populateLiveFields(msg);
+    // Unity
     if (msg.unityEndpoint) document.getElementById('endpoint').value = msg.unityEndpoint;
     if (msg.pipelineDestination !== undefined) document.getElementById('bliveDestination').value = msg.pipelineDestination;
-    document.getElementById('autoForward').checked = msg.autoForward;
-    document.getElementById('forwardGifts').checked = msg.forwardGifts;
-    // Bilibili credentials
-    if (msg.sessdata) document.getElementById('sessdata').value = msg.sessdata;
-    if (msg.openLiveKeyId) document.getElementById('olKeyId').value = msg.openLiveKeyId;
-    if (msg.openLiveKeySecret) document.getElementById('olKeySecret').value = msg.openLiveKeySecret;
-    if (msg.openLiveAppId) document.getElementById('olAppId').value = msg.openLiveAppId;
-    // Unity
     if (msg.unityConnected !== undefined) unityConnected = msg.unityConnected;
     // Frontend
     if (msg.customCss) document.getElementById('customCss').value = msg.customCss;
-    // Block rules
-    if (msg.blockGiftDanmaku !== undefined) document.getElementById('blockGiftDanmaku').checked = msg.blockGiftDanmaku;
-    if (msg.blockNewbie !== undefined) document.getElementById('blockNewbie').checked = msg.blockNewbie;
-    if (msg.blockNotMobileVerified !== undefined) document.getElementById('blockNotMobileVerified').checked = msg.blockNotMobileVerified;
-    if (msg.blockMirrorMessages !== undefined) document.getElementById('blockMirrorMessages').checked = msg.blockMirrorMessages;
-    if (msg.blockLevel !== undefined) document.getElementById('blockLevel').value = msg.blockLevel;
-    if (msg.blockMedalLevel !== undefined) document.getElementById('blockMedalLevel').value = msg.blockMedalLevel;
-    if (msg.blockKeywords) document.getElementById('blockKeywords').value = msg.blockKeywords;
-    if (msg.blockUsers) document.getElementById('blockUsers').value = msg.blockUsers;
-    onPlatformChange();
-    onConnectModeChange();
     updateUI();
     updateUnityUI();
     updateStats(msg.received, msg.forwarded);
@@ -898,6 +876,99 @@ function closeModal(id) {
 }
 function closeModalOverlay(e) {
   if (e.target === e.currentTarget) e.target.classList.remove('open');
+}
+
+// ─── Open modals with fresh state from server ───
+function populateLiveFields(s) {
+  const saved = s.saved || {};
+  const platform = s.platform || 'bilibili';
+  document.getElementById('platform').value = platform;
+  currentPlatform = platform;
+
+  // Shared fields from active platform state
+  document.getElementById('autoForward').checked = !!s.autoForward;
+  document.getElementById('forwardGifts').checked = !!s.forwardGifts;
+
+  // Bilibili fields: from active state if bilibili, else from saved
+  const bili = platform === 'bilibili' ? s : (() => {
+    const b = saved.bilibili || {};
+    return {
+      connectMode: b.connect_mode || 'guest',
+      roomId: b.room_id || '', authCode: b.auth_code || '',
+      sessdata: b.sessdata || '',
+      openLiveKeyId: b.open_live_key_id || '',
+      openLiveKeySecret: b.open_live_key_secret || '',
+      openLiveAppId: b.open_live_app_id || 0,
+      blockGiftDanmaku: b.block_gift_danmaku || false,
+      blockNewbie: b.block_newbie || false,
+      blockNotMobileVerified: b.block_not_mobile_verified || false,
+      blockMirrorMessages: b.block_mirror_messages || false,
+      blockLevel: b.block_level || 0,
+      blockMedalLevel: b.block_medal_level || 0,
+      blockKeywords: b.block_keywords || '',
+      blockUsers: b.block_users || '',
+    };
+  })();
+  document.getElementById('connectMode').value = bili.connectMode || 'guest';
+  currentConnectMode = bili.connectMode || 'guest';
+  document.getElementById('roomId').value = bili.roomId || '';
+  document.getElementById('authCode').value = bili.authCode || '';
+  document.getElementById('sessdata').value = bili.sessdata || '';
+  document.getElementById('olKeyId').value = bili.openLiveKeyId || '';
+  document.getElementById('olKeySecret').value = bili.openLiveKeySecret || '';
+  document.getElementById('olAppId').value = bili.openLiveAppId || '';
+  document.getElementById('blockGiftDanmaku').checked = !!bili.blockGiftDanmaku;
+  document.getElementById('blockNewbie').checked = !!bili.blockNewbie;
+  document.getElementById('blockNotMobileVerified').checked = !!bili.blockNotMobileVerified;
+  document.getElementById('blockMirrorMessages').checked = !!bili.blockMirrorMessages;
+  document.getElementById('blockLevel').value = bili.blockLevel || 0;
+  document.getElementById('blockMedalLevel').value = bili.blockMedalLevel || 0;
+  document.getElementById('blockKeywords').value = bili.blockKeywords || '';
+  document.getElementById('blockUsers').value = bili.blockUsers || '';
+
+  // YouTube fields: from active state if youtube, else from saved
+  const yt = platform === 'youtube' ? s : (() => {
+    const y = saved.youtube || {};
+    return {
+      ytUrl: y.url || '',
+      ytBlockKeywords: y.block_keywords || '',
+      ytBlockUsers: y.block_users || '',
+    };
+  })();
+  document.getElementById('ytUrl').value = yt.ytUrl || '';
+  document.getElementById('ytBlockKeywords').value = yt.ytBlockKeywords || '';
+  document.getElementById('ytBlockUsers').value = yt.ytBlockUsers || '';
+
+  onPlatformChange();
+  onConnectModeChange();
+}
+
+async function openLiveModal() {
+  try {
+    const res = await fetch('/api/state');
+    const s = await res.json();
+    populateLiveFields(s);
+  } catch (e) {}
+  openModal('liveModal');
+}
+
+async function openUnityModal() {
+  try {
+    const res = await fetch('/api/state');
+    const s = await res.json();
+    if (s.unityEndpoint) document.getElementById('endpoint').value = s.unityEndpoint;
+    if (s.pipelineDestination !== undefined) document.getElementById('bliveDestination').value = s.pipelineDestination;
+  } catch (e) {}
+  openModal('unityModal');
+}
+
+async function openFrontendModal() {
+  try {
+    const res = await fetch('/api/state');
+    const s = await res.json();
+    if (s.customCss) document.getElementById('customCss').value = s.customCss;
+  } catch (e) {}
+  openModal('frontendModal');
 }
 
 // ─── Platform & Connect Mode Toggle ───
@@ -959,26 +1030,33 @@ function updateUnityUI() {
 
 // ─── Settings Save (per-modal) ───
 async function saveLiveSettings() {
+  const platform = document.getElementById('platform').value;
   const settings = {
-    platform: document.getElementById('platform').value,
-    connectMode: document.getElementById('connectMode').value,
-    roomId: document.getElementById('roomId').value.trim(),
-    authCode: document.getElementById('authCode').value.trim(),
-    sessdata: document.getElementById('sessdata').value.trim(),
-    openLiveKeyId: document.getElementById('olKeyId').value.trim(),
-    openLiveKeySecret: document.getElementById('olKeySecret').value.trim(),
-    openLiveAppId: parseInt(document.getElementById('olAppId').value) || 0,
+    platform,
     autoForward: document.getElementById('autoForward').checked,
     forwardGifts: document.getElementById('forwardGifts').checked,
-    blockGiftDanmaku: document.getElementById('blockGiftDanmaku').checked,
-    blockNewbie: document.getElementById('blockNewbie').checked,
-    blockNotMobileVerified: document.getElementById('blockNotMobileVerified').checked,
-    blockMirrorMessages: document.getElementById('blockMirrorMessages').checked,
-    blockLevel: parseInt(document.getElementById('blockLevel').value) || 0,
-    blockMedalLevel: parseInt(document.getElementById('blockMedalLevel').value) || 0,
-    blockKeywords: document.getElementById('blockKeywords').value,
-    blockUsers: document.getElementById('blockUsers').value,
   };
+  if (platform === 'bilibili') {
+    settings.connectMode = document.getElementById('connectMode').value;
+    settings.roomId = document.getElementById('roomId').value.trim();
+    settings.authCode = document.getElementById('authCode').value.trim();
+    settings.sessdata = document.getElementById('sessdata').value.trim();
+    settings.openLiveKeyId = document.getElementById('olKeyId').value.trim();
+    settings.openLiveKeySecret = document.getElementById('olKeySecret').value.trim();
+    settings.openLiveAppId = parseInt(document.getElementById('olAppId').value) || 0;
+    settings.blockGiftDanmaku = document.getElementById('blockGiftDanmaku').checked;
+    settings.blockNewbie = document.getElementById('blockNewbie').checked;
+    settings.blockNotMobileVerified = document.getElementById('blockNotMobileVerified').checked;
+    settings.blockMirrorMessages = document.getElementById('blockMirrorMessages').checked;
+    settings.blockLevel = parseInt(document.getElementById('blockLevel').value) || 0;
+    settings.blockMedalLevel = parseInt(document.getElementById('blockMedalLevel').value) || 0;
+    settings.blockKeywords = document.getElementById('blockKeywords').value;
+    settings.blockUsers = document.getElementById('blockUsers').value;
+  } else if (platform === 'youtube') {
+    settings.ytUrl = document.getElementById('ytUrl').value.trim();
+    settings.blockKeywords = document.getElementById('ytBlockKeywords').value;
+    settings.blockUsers = document.getElementById('ytBlockUsers').value;
+  }
   await fetch('/api/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

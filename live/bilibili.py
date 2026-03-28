@@ -56,6 +56,7 @@ class BilibiliLive:
 
         # Connection state
         self._live_client = None
+        self._guest_session = None
         self.connected = False
         self.room_id = config.get('room_id') or ''
         self.auth_code = config.get('auth_code') or ''
@@ -78,18 +79,22 @@ class BilibiliLive:
         # Stats
         self.msg_received = 0
 
+        # Platform identifier (used by create_live factory)
+        self.platform = 'bilibili'
+
         # Session
         self._bili_session = None
 
     async def start(self):
-        """Create bilibili HTTP session. Call once at app startup."""
-        await self._create_bili_session()
+        """No-op at startup. Session is created in connect()."""
+        pass
 
     async def stop(self):
         """Disconnect and close session. Call at app shutdown."""
         await self.disconnect()
         if self._bili_session:
             await self._bili_session.close()
+            self._bili_session = None
 
     async def _create_bili_session(self):
         """Create/recreate bilibili session with current SESSDATA."""
@@ -125,16 +130,18 @@ class BilibiliLive:
                 return False
             if mode == 'guest':
                 return await self._connect_guest(self.room_id)
+            # Rebuild session with current sessdata before connecting
+            await self._create_bili_session()
             return await self._connect_web(self.room_id)
 
     async def _connect_guest(self, room_id):
         try:
-            guest_session = aiohttp.ClientSession(
+            self._guest_session = aiohttp.ClientSession(
                 response_class=_CustomClientResponse,
                 timeout=aiohttp.ClientTimeout(total=10),
             )
             self._live_client = blivedm.BLiveClient(
-                int(room_id), session=guest_session,
+                int(room_id), session=self._guest_session,
             )
             self._live_client.set_handler(_DanmakuHandler(self))
             self._live_client.start()
@@ -202,6 +209,9 @@ class BilibiliLive:
                 except Exception:
                     pass
             self._live_client = None
+        if self._guest_session:
+            await self._guest_session.close()
+            self._guest_session = None
         self.connected = False
         logger.info('Disconnected from bilibili')
         await self._on_status_change(False)
@@ -210,6 +220,7 @@ class BilibiliLive:
 
     # camelCase key → (attr_name, type)
     _SETTINGS_MAP = {
+        'sessdata': ('sessdata', str),
         'connectMode': ('connect_mode', str),
         'roomId': ('room_id', str),
         'authCode': ('auth_code', str),
@@ -228,20 +239,39 @@ class BilibiliLive:
         'blockMirrorMessages': ('block_mirror_messages', bool),
     }
 
+    # Keys whose change requires disconnect (user must manually reconnect)
+    _CONNECTION_KEYS = {'connectMode', 'roomId', 'authCode', 'sessdata',
+                        'openLiveKeyId', 'openLiveKeySecret', 'openLiveAppId'}
+
     async def update_settings(self, data):
-        """Update settings from web UI (camelCase keys). Ignores unknown keys."""
+        """Update settings from web UI (camelCase keys). Ignores unknown keys.
+
+        If a connection-related setting actually changed while connected,
+        disconnect and notify server via on_status_change(False).
+        """
+        # Detect connection-related changes before applying
+        connection_changed = False
+        for key in self._CONNECTION_KEYS:
+            if key not in data:
+                continue
+            attr, typ = self._SETTINGS_MAP[key]
+            if typ(data[key]) != getattr(self, attr):
+                connection_changed = True
+                break
+
+        # Disconnect first (while old values still intact) if needed
+        if connection_changed and self.connected:
+            await self.disconnect()
+
+        # Then apply all new settings
         for camel, (attr, typ) in self._SETTINGS_MAP.items():
             if camel in data:
                 setattr(self, attr, typ(data[camel]))
 
-        # sessdata needs async handling (recreate HTTP session)
-        if 'sessdata' in data:
-            self.sessdata = data['sessdata']
-            await self._create_bili_session()
-
     def get_state(self):
         """Return live-related state for API (camelCase keys)."""
         return {
+            'platform': self.platform,
             'connected': self.connected,
             'roomId': self.room_id,
             'authCode': self.auth_code,
@@ -264,14 +294,17 @@ class BilibiliLive:
         }
 
     def get_persist_data(self):
-        """Return live-related data for settings.json (snake_case keys)."""
+        """Return bilibili-specific data for settings.json (snake_case keys).
+
+        Shared settings (platform) are saved by the server at the top level.
+        """
         return {
+            'auto_forward': self.auto_forward,
+            'forward_gifts': self.forward_gifts,
             'sessdata': self.sessdata,
             'open_live_key_id': self.open_live_key_id,
             'open_live_key_secret': self.open_live_key_secret,
             'open_live_app_id': self.open_live_app_id,
-            'auto_forward': self.auto_forward,
-            'forward_gifts': self.forward_gifts,
             'room_id': self.room_id,
             'auth_code': self.auth_code,
             'connect_mode': self.connect_mode,
