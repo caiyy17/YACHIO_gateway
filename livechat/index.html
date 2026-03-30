@@ -175,6 +175,7 @@ function renderMembershipItem(data) {
   const el = document.createElement('yt-live-chat-membership-item-renderer');
   el.classList.add('yt-live-chat-item-list-renderer');
   el.setAttribute('show-only-header', '');
+  if (data.guard_level) el.setAttribute('data-guard-level', data.guard_level);
 
   el.innerHTML =
     `<div id="card" class="yt-live-chat-membership-item-renderer">` +
